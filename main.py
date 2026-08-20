@@ -4,40 +4,56 @@ import random
 import math
 import os
 
+# 1. Pre-init mixer to ensure Android audio buffers initialize safely
+pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
 
-
 FPS = 60
-
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 width, height = screen.get_size()
-
 pygame.display.set_caption("Clock")
 clock = pygame.time.Clock()
 game_font = pygame.font.Font(None, 40)
 
+# 2. Android-safe absolute pathing
 try:
-    save_dir = pygame.system.get_pref_path("MyGames", "ClockGame")
+    base_path = sys._MEIPASS
 except AttributeError:
-    save_dir = "."
-    
-save_file_path = os.path.join(save_dir, "highscore.txt")
+    # Safely target the exact folder where the script lives on the phone
+    base_path = os.path.dirname(os.path.abspath(__file__))
 
 def resource_path(relative_path):
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
-hit_yellow_snd = pygame.mixer.Sound(resource_path("yellow.wav"))
-hit_blue_snd = pygame.mixer.Sound(resource_path("blue.wav"))
-miss_snd = pygame.mixer.Sound(resource_path("miss.wav"))
-game_over_snd = pygame.mixer.Sound(resource_path("end.wav"))
+# 3. Android-safe writable storage for High Scores
+if 'ANDROID_ARGUMENT' in os.environ:
+    # Route saves to Android's verified writable internal storage
+    save_dir = os.environ.get('ANDROID_PRIVATE', base_path)
+else:
+    try:
+        import pygame.system
+        save_dir = pygame.system.get_pref_path("MyGames", "ClockGame")
+    except (ImportError, AttributeError):
+        save_dir = base_path
+        
+save_file_path = os.path.join(save_dir, "highscore.txt")
 
-hit_yellow_snd.set_volume(0.5)
-hit_blue_snd.set_volume(0.5)
+# 4. Bulletproof Audio Loading 
+class MockSound:
+    def play(self): pass
+    def set_volume(self, v): pass
+
+try:
+    hit_yellow_snd = pygame.mixer.Sound(resource_path("yellow.wav"))
+    hit_blue_snd = pygame.mixer.Sound(resource_path("blue.wav"))
+    miss_snd = pygame.mixer.Sound(resource_path("miss.wav"))
+    game_over_snd = pygame.mixer.Sound(resource_path("end.wav"))
+    hit_yellow_snd.set_volume(0.5)
+    hit_blue_snd.set_volume(0.5)
+except Exception as e:
+    print(f"Audio Load Error: {e}")
+    # Failsafe: If Android rejects the .wav encoding, run silently instead of crashing!
+    hit_yellow_snd = hit_blue_snd = miss_snd = game_over_snd = MockSound()
 
 def load_high_score():
     if os.path.exists(save_file_path):
@@ -198,7 +214,7 @@ while running:
 
         if 0 < blade_velocity < 2:
             blade_velocity += blade_acc
-        elif -2< blade_velocity < 0:
+        elif -2 < blade_velocity < 0:
             blade_velocity -= blade_acc
         elif blade_velocity > 2:
             blade_velocity = 2
@@ -232,10 +248,25 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+            
+        # 5. Native Android Back Button Support
+        if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, getattr(pygame, 'K_AC_BACK', -1)):
+            running = False
+            
         if event.type == zone_spawn and game_active:
             spawn_zone()
             pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
-        if (event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE) or (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1):
+            
+        # 6. Combined Mobile Touch & PC Clicks
+        is_tap = False
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            is_tap = True
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            is_tap = True
+        if event.type == pygame.FINGERDOWN:  # Android explicit touch event
+            is_tap = True
+            
+        if is_tap:
             if game_active:
                 if abs(blade_velocity) >= 2:
                     hit_successful = False 
@@ -263,7 +294,6 @@ while running:
                     if not hit_successful:
                         blade_velocity = blade_velocity / 100
                         miss_snd.play()
-                
             else:
                 game_active = True
                 score = 0
