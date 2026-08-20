@@ -19,7 +19,6 @@ game_font = pygame.font.Font(None, 40)
 try:
     base_path = sys._MEIPASS
 except AttributeError:
-    # Safely target the exact folder where the script lives on the phone
     base_path = os.path.dirname(os.path.abspath(__file__))
 
 def resource_path(relative_path):
@@ -27,7 +26,6 @@ def resource_path(relative_path):
 
 # 3. Android-safe writable storage for High Scores
 if 'ANDROID_ARGUMENT' in os.environ:
-    # Route saves to Android's verified writable internal storage
     save_dir = os.environ.get('ANDROID_PRIVATE', base_path)
 else:
     try:
@@ -52,7 +50,6 @@ try:
     hit_blue_snd.set_volume(0.5)
 except Exception as e:
     print(f"Audio Load Error: {e}")
-    # Failsafe: If Android rejects the .wav encoding, run silently instead of crashing!
     hit_yellow_snd = hit_blue_snd = miss_snd = game_over_snd = MockSound()
 
 def load_high_score():
@@ -71,24 +68,39 @@ def save_high_score(new_score):
     except Exception as e:
         print(f"Failed to save score: {e}")
 
+# 5. Pure Math Collision (Bypasses the CPU bottleneck)
+def is_blade_hitting_zone(blade_angle, zone):
+    normalized_blade = blade_angle % 360
+    half_sweep = zone.sweep_angle / 2
+    start_angle = (zone.center_angle - half_sweep) % 360
+    end_angle = (zone.center_angle + half_sweep) % 360
+    
+    if start_angle < end_angle:
+        return start_angle <= normalized_blade <= end_angle
+    else:
+        return normalized_blade >= start_angle or normalized_blade <= end_angle
+
 class Zone:
     def __init__(self, angle):
         self.center_angle = angle
         self.sweep_angle = 20
-        self.shrink_speed = 0.1
+        self.shrink_speed = 6.0 # Adjusted for Delta Time (per second instead of per frame)
         self.outer_radius = 200
         self.inner_radius = 150
-        self.color = random.randint(0, 4) #0 for blue
+        self.color = random.randint(0, 4) 
+        
+        # 6. Pre-allocate the surface once to save Android RAM
+        self.surface_size = self.outer_radius * 2
+        self.surface = pygame.Surface((self.surface_size, self.surface_size), pygame.SRCALPHA)
 
-    def update(self):
-        self.sweep_angle -= self.shrink_speed
+    def update(self, dt):
+        self.sweep_angle -= self.shrink_speed * dt
 
     def is_dead(self):
         return self.sweep_angle <= 0
 
-    def get_surface_and_mask(self):
-        surface_size = self.outer_radius * 2
-        sector_surface = pygame.Surface((surface_size, surface_size), pygame.SRCALPHA)
+    def get_surface(self):
+        self.surface.fill((0, 0, 0, 0)) # Wipe the surface clear for the new frame
         surface_center = (self.outer_radius, self.outer_radius)
 
         half_sweep = self.sweep_angle / 2
@@ -97,7 +109,6 @@ class Zone:
 
         points = []
         
-        # Outer Edge
         for angle in range(int(start_angle), int(end_angle) + 1, 5): 
             rad = math.radians(angle)
             x = surface_center[0] + self.outer_radius * math.cos(rad)
@@ -109,7 +120,6 @@ class Zone:
             surface_center[1] - self.outer_radius * math.sin(math.radians(end_angle))
         ))
 
-        # Inner Edge
         for angle in range(int(end_angle), int(start_angle) - 1, -5):
             rad = math.radians(angle)
             x = surface_center[0] + self.inner_radius * math.cos(rad)
@@ -123,12 +133,11 @@ class Zone:
 
         if len(points) >= 3:
             if self.color == 0:
-                pygame.draw.polygon(sector_surface, (0, 0, 255), points)
+                pygame.draw.polygon(self.surface, (0, 0, 255), points)
             else:
-                pygame.draw.polygon(sector_surface, (255, 255, 0), points)
+                pygame.draw.polygon(self.surface, (255, 255, 0), points)
             
-        sector_mask = pygame.mask.from_surface(sector_surface)
-        return sector_surface, sector_mask
+        return self.surface
 
 # Variables
 blade_length = 200
@@ -223,33 +232,39 @@ while running:
         blade_angle += blade_velocity
 
         screen.fill((30, 30, 30))
+        
+        invis_surface.fill((0, 0, 0, 0))
         if abs(blade_velocity) == 2:
             pygame.draw.rect(invis_surface, (0, 255, 0), visible_blade)
         else:
             pygame.draw.rect(invis_surface, (255, 0, 0), visible_blade)
+            
         rotated_surface = pygame.transform.rotate(invis_surface, blade_angle)
         rotated_rect = rotated_surface.get_rect(center=pivot_center)
-        blade_mask = pygame.mask.from_surface(rotated_surface)
         screen.blit(rotated_surface, rotated_rect)
+        
         score_surface = game_font.render(f"{int(score)}", True, (255, 255, 255))
         screen.blit(score_surface, score_surface.get_rect(center=(width // 2, 80)))
         timer_surface = game_font.render(f"{timer:.1f}", True, (255, 255, 255))
         screen.blit(timer_surface, timer_surface.get_rect(center=(width // 2, height - 80)))
 
+    current_frame_zones = []
     for zone in active_zones[::-1]:
-        zone.update()
+        zone.update(dt)
         if zone.is_dead():
             active_zones.remove(zone)
             continue
-        sector_surface, sector_mask = zone.get_surface_and_mask()
+        sector_surface = zone.get_surface()
         sector_rect = sector_surface.get_rect(center=pivot_center)                 
         screen.blit(sector_surface, sector_rect)
+        current_frame_zones.append(zone)
 
+    # 7. Unified Tap Detection
+    tapped_this_frame = False
+    
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-            
-        # 5. Native Android Back Button Support
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, getattr(pygame, 'K_AC_BACK', -1)):
             running = False
             
@@ -257,53 +272,50 @@ while running:
             spawn_zone()
             pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
             
-        # 6. Combined Mobile Touch & PC Clicks
-        is_tap = False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            is_tap = True
+            tapped_this_frame = True
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            is_tap = True
-        if event.type == pygame.FINGERDOWN:  # Android explicit touch event
-            is_tap = True
-            
-        if is_tap:
-            if game_active:
-                if abs(blade_velocity) >= 2:
-                    hit_successful = False 
-                    for zone in active_zones[::-1]:
-                        sector_surface, sector_mask = zone.get_surface_and_mask()
-                        sector_rect = sector_surface.get_rect(center=pivot_center)
-                        offset = (sector_rect.x - rotated_rect.x, sector_rect.y - rotated_rect.y)
-                        
-                        if blade_mask.overlap(sector_mask, offset):
-                            score += 1
+            tapped_this_frame = True
+        if getattr(pygame, 'FINGERDOWN', None) is not None and event.type == pygame.FINGERDOWN:
+            tapped_this_frame = True
+
+    if tapped_this_frame:
+        if game_active:
+            if abs(blade_velocity) >= 2:
+                hit_successful = False 
+                for zone in current_frame_zones:
+                    if is_blade_hitting_zone(blade_angle, zone):
+                        score += 1
+                        if zone in active_zones:
                             active_zones.remove(zone)
-                            if zone.color == 0:
-                                timer += 2
-                                hit_blue_snd.play()
-                            else:
-                                hit_yellow_snd.play()
-                            if blade_velocity > 0:
-                                blade_velocity = -2
-                            else:
-                                blade_velocity = 2
-                                
-                            hit_successful = True 
-                            break 
                             
-                    if not hit_successful:
-                        blade_velocity = blade_velocity / 100
-                        miss_snd.play()
-            else:
-                game_active = True
-                score = 0
-                timer = 30
-                active_zones.clear()
-                angle_cd.clear()
-                mode_counter = random.randint(7,9)
-                lower_bound = 600
-                upper_bound = 1400
-                pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
+                        if zone.color == 0:
+                            timer += 2
+                            hit_blue_snd.play()
+                        else:
+                            hit_yellow_snd.play()
+                            
+                        if blade_velocity > 0:
+                            blade_velocity = -2
+                        else:
+                            blade_velocity = 2
+                            
+                        hit_successful = True 
+                        break 
+                        
+                if not hit_successful:
+                    blade_velocity = blade_velocity / 100
+                    miss_snd.play()
+        else:
+            game_active = True
+            score = 0
+            timer = 30
+            active_zones.clear()
+            angle_cd.clear()
+            mode_counter = random.randint(7,9)
+            lower_bound = 600
+            upper_bound = 1400
+            pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
 
     pygame.display.update()
 
