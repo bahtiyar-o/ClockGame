@@ -221,15 +221,18 @@ while running:
         for angle in angles_to_remove:
             del angle_cd[angle]
 
+        speed_factor = dt * 60.0
+
         if 0 < blade_velocity < 2:
-            blade_velocity += blade_acc
+            blade_velocity += blade_acc * speed_factor
         elif -2 < blade_velocity < 0:
-            blade_velocity -= blade_acc
+            blade_velocity -= blade_acc * speed_factor
         elif blade_velocity > 2:
             blade_velocity = 2
         elif blade_velocity < -2:
             blade_velocity = -2
-        blade_angle += blade_velocity
+            
+        blade_angle += blade_velocity * speed_factor
 
         screen.fill((30, 30, 30))
         
