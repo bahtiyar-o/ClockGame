@@ -42,7 +42,7 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3==3.10.12, hostpython3==3.10.12, pygame-ce
+requirements = python3==3.10.12, hostpython3==3.10.12, pygame
 
 android.ndk = 25b
 
