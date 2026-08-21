@@ -13,7 +13,7 @@ screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 width, height = screen.get_size()
 pygame.display.set_caption("Clock")
 clock = pygame.time.Clock()
-game_font = pygame.font.Font(None, 40)
+game_font = pygame.font.Font(None, 80)
 
 # 2. Android-safe absolute pathing
 try:
@@ -85,8 +85,8 @@ class Zone:
         self.center_angle = angle
         self.sweep_angle = 20
         self.shrink_speed = 6.0 # Adjusted for Delta Time (per second instead of per frame)
-        self.outer_radius = 200
-        self.inner_radius = 150
+        self.outer_radius = blade_length
+        self.inner_radius = (3*self.outer_radius) / 4
         self.color = random.randint(0, 4) 
         
         # 6. Pre-allocate the surface once to save Android RAM
@@ -139,9 +139,35 @@ class Zone:
             
         return self.surface
 
+class FloatingText:
+    def __init__(self, text, x, y, color):
+        self.text = text
+        self.x = x
+        self.y = float(y)
+        self.color = color
+        self.alpha = 255.0
+        self.speed = 40.0 # Moves up 40 pixels per second
+        self.fade_speed = 255.0 # Fades completely away in 1 second
+
+    def update(self, dt):
+        self.y -= self.speed * dt
+        self.alpha -= self.fade_speed * dt
+
+    def is_dead(self):
+        return self.alpha <= 0
+
+    def draw(self, surface, font):
+        if self.alpha > 0:
+            text_surf = font.render(self.text, True, self.color)
+            # Apply transparency to the text surface
+            text_surf.set_alpha(int(self.alpha)) 
+            rect = text_surf.get_rect(center=(self.x, int(self.y)))
+            surface.blit(text_surf, rect)
+
 # Variables
-blade_length = 200
-blade_thickness = 5
+pivot_center = (width / 2, height / 2)
+blade_length = (4 * width) / 10
+blade_thickness = 7
 blade_angle = 90
 blade_acc = 0.05
 blade_velocity = 2
@@ -158,6 +184,7 @@ high_score = load_high_score()
 
 active_zones = []
 angle_cd = {}
+floating_texts = []
 
 def spawn_zone():
     available_angles = []
@@ -172,36 +199,62 @@ def spawn_zone():
         active_zones.append(new_zone)
         angle_cd[chosen_angle] = 3.1
 
-# Rotating blade
-surface_width = blade_length * 2
-invis_surface = pygame.Surface((surface_width, blade_thickness), pygame.SRCALPHA)
-visible_blade = pygame.Rect(blade_length, 0, blade_length, blade_thickness)
-pivot_center = (width / 2, height / 2)
 
-game_active, running = True, True
+title = game_font.render("CLOCK GAME", True, (255, 255, 255))
+rule1 = game_font.render("Tap to strike blocks", True, (200, 200, 200))
+rule2 = game_font.render("Yellow: +1 Score", True, (255, 255, 0))
+rule3 = game_font.render("Blue: +1 Score, +2 Seconds", True, (100, 150, 255))
+start_prompt = game_font.render("Tap anywhere to start!", True, (0, 255, 0))
+game_over_text = game_font.render("Game Over!", True, (255, 0, 0))
+score_text = game_font.render(f"Score: {int(score)}", True, (255, 255, 255))
+high_score_text = game_font.render(f"High Score: {int(high_score)}", True, (255, 215, 0))
+restart_prompt = game_font.render("Tap to Restart", True, (0, 255, 0))
+
+# The new State Machine variables
+game_state = "start" 
+restart_cooldown = 0.0
+running = True
 
 while running:
     dt = clock.tick(60) / 1000.0
-    if timer == 0:
-        blade_angle = 90
-        if score > high_score:
-            high_score = score
-            save_high_score(high_score)
+    
+    # 1. Fill the background first every frame
+    screen.fill((30, 30, 30))
 
-        screen.fill((30, 30, 30))
-        game_over_text = game_font.render("Game Over! Tap to Restart.", True, (255, 0, 0))
-        score_text = game_font.render(f"Score: {int(score)}", True, (255, 255, 255))
-        high_score_text = game_font.render(f"High Score: {int(high_score)}", True, (255, 215, 0))
-        screen.blit(game_over_text, game_over_text.get_rect(center=(width // 2, height // 2 - 80)))
+    # --- STATE: START MENU ---
+    if game_state == "start":
+        screen.blit(title, title.get_rect(center=(width // 2, height // 2 - 220)))
+        screen.blit(rule1, rule1.get_rect(center=(width // 2, height // 2 - 90)))
+        screen.blit(rule2, rule2.get_rect(center=(width // 2, height // 2 - 20)))
+        screen.blit(rule3, rule3.get_rect(center=(width // 2, height // 2 + 50)))
+        screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 180)))
+        if pygame.time.get_ticks() % 1000 < 500:
+            screen.blit(start_prompt, start_prompt.get_rect(center=(width // 2, height // 2 + 310)))
+
+    # --- STATE: GAME OVER ---
+    elif game_state == "game_over":
+        if restart_cooldown > 0:
+            restart_cooldown -= dt
+        screen.blit(game_over_text, game_over_text.get_rect(center=(width // 2, height // 2 - 120)))
         screen.blit(score_text, score_text.get_rect(center=(width // 2, height // 2)))
-        screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 80)))
+        screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 120)))
         
-    if game_active:
+        if restart_cooldown <= 0:
+            if pygame.time.get_ticks() % 1000 < 500:
+                screen.blit(restart_prompt, restart_prompt.get_rect(center=(width // 2, height // 2 + 250)))
+
+    # --- STATE: ACTIVELY PLAYING ---
+    elif game_state == "playing":
         timer -= dt
         if timer <= 0:
             timer = 0
-            game_active = False
+            game_state = "game_over"
             game_over_snd.play()
+            restart_cooldown = 0.5 # Start the cooldown when you die
+            blade_angle = 90
+            if score > high_score:
+                high_score = score
+                save_high_score(high_score)
         
         mode_counter -= dt
         if mode_counter <= 0:
@@ -222,7 +275,6 @@ while running:
             del angle_cd[angle]
 
         speed_factor = dt * 60.0
-
         if 0 < blade_velocity < 2:
             blade_velocity += blade_acc * speed_factor
         elif -2 < blade_velocity < 0:
@@ -233,36 +285,41 @@ while running:
             blade_velocity = -2
             
         blade_angle += blade_velocity * speed_factor
-
-        screen.fill((30, 30, 30))
         
-        invis_surface.fill((0, 0, 0, 0))
-        if abs(blade_velocity) == 2:
-            pygame.draw.rect(invis_surface, (0, 255, 0), visible_blade)
-        else:
-            pygame.draw.rect(invis_surface, (255, 0, 0), visible_blade)
-            
-        rotated_surface = pygame.transform.rotate(invis_surface, blade_angle)
-        rotated_rect = rotated_surface.get_rect(center=pivot_center)
-        screen.blit(rotated_surface, rotated_rect)
+        blade_color = (0, 255, 0) if abs(blade_velocity) == 2 else (255, 0, 0)
+        
+        # Calculate the exact X/Y coordinate of the blade's tip
+        rad = math.radians(blade_angle)
+        tip_x = pivot_center[0] + blade_length * math.cos(rad)
+        tip_y = pivot_center[1] - blade_length * math.sin(rad)
+        
+        # Draw a line directly on the screen in 1 step
+        pygame.draw.line(screen, blade_color, pivot_center, (tip_x, tip_y), blade_thickness)
         
         score_surface = game_font.render(f"{int(score)}", True, (255, 255, 255))
         screen.blit(score_surface, score_surface.get_rect(center=(width // 2, 80)))
         timer_surface = game_font.render(f"{timer:.1f}", True, (255, 255, 255))
         screen.blit(timer_surface, timer_surface.get_rect(center=(width // 2, height - 80)))
 
-    current_frame_zones = []
-    for zone in active_zones[::-1]:
-        zone.update(dt)
-        if zone.is_dead():
-            active_zones.remove(zone)
-            continue
-        sector_surface = zone.get_surface()
-        sector_rect = sector_surface.get_rect(center=pivot_center)                 
-        screen.blit(sector_surface, sector_rect)
-        current_frame_zones.append(zone)
+        current_frame_zones = []
+        for zone in active_zones[::-1]:
+            zone.update(dt)
+            if zone.is_dead():
+                active_zones.remove(zone)
+                continue
+            sector_surface = zone.get_surface()
+            sector_rect = sector_surface.get_rect(center=pivot_center)                 
+            screen.blit(sector_surface, sector_rect)
+            current_frame_zones.append(zone)
 
-    # 7. Unified Tap Detection
+        for f_text in floating_texts[::-1]:
+            f_text.update(dt)
+            if f_text.is_dead():
+                floating_texts.remove(f_text)
+            else:
+                f_text.draw(screen, game_font)
+
+    # --- UNIFIED EVENT PROCESSING ---
     tapped_this_frame = False
     
     for event in pygame.event.get():
@@ -271,7 +328,7 @@ while running:
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, getattr(pygame, 'K_AC_BACK', -1)):
             running = False
             
-        if event.type == zone_spawn and game_active:
+        if event.type == zone_spawn and game_state == "playing":
             spawn_zone()
             pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
             
@@ -283,7 +340,7 @@ while running:
             tapped_this_frame = True
 
     if tapped_this_frame:
-        if game_active:
+        if game_state == "playing":
             if abs(blade_velocity) >= 2:
                 hit_successful = False 
                 for zone in current_frame_zones:
@@ -294,6 +351,7 @@ while running:
                             
                         if zone.color == 0:
                             timer += 2
+                            floating_texts.append(FloatingText("+2", width // 2, height - 150, (100, 150, 255)))
                             hit_blue_snd.play()
                         else:
                             hit_yellow_snd.play()
@@ -309,16 +367,20 @@ while running:
                 if not hit_successful:
                     blade_velocity = blade_velocity / 100
                     miss_snd.play()
+                    
         else:
-            game_active = True
-            score = 0
-            timer = 30
-            active_zones.clear()
-            angle_cd.clear()
-            mode_counter = random.randint(7,9)
-            lower_bound = 600
-            upper_bound = 1400
-            pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
+            if game_state == "start" or (game_state == "game_over" and restart_cooldown <= 0):
+                game_state = "playing"
+                score = 0
+                timer = 30
+                blade_velocity = 2
+                blade_angle = 90
+                active_zones.clear()
+                angle_cd.clear()
+                mode_counter = random.randint(7,9)
+                lower_bound = 600
+                upper_bound = 1400
+                pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
 
     pygame.display.update()
 
