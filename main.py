@@ -84,12 +84,11 @@ class Zone:
     def __init__(self, angle):
         self.center_angle = angle
         self.sweep_angle = 20
-        self.shrink_speed = 6
+        self.shrink_speed = 6.0 
         self.outer_radius = blade_length
-        self.inner_radius = (3*self.outer_radius) / 4
+        self.inner_radius = (3 * self.outer_radius) / 4
         self.color = random.randint(0, 4) 
-        self.surface_size = self.outer_radius * 2
-        self.surface = pygame.Surface((self.surface_size, self.surface_size), pygame.SRCALPHA)
+        # Removed the heavy SRCALPHA surface entirely!
 
     def update(self, dt):
         self.sweep_angle -= self.shrink_speed * dt
@@ -97,10 +96,7 @@ class Zone:
     def is_dead(self):
         return self.sweep_angle <= 0
 
-    def get_surface(self):
-        self.surface.fill((0, 0, 0, 0))
-        surface_center = (self.outer_radius, self.outer_radius)
-
+    def draw(self, screen, pivot_center):
         half_sweep = self.sweep_angle / 2
         start_angle = self.center_angle - half_sweep
         end_angle = self.center_angle + half_sweep
@@ -109,33 +105,29 @@ class Zone:
         
         for angle in range(int(start_angle), int(end_angle) + 1, 5): 
             rad = math.radians(angle)
-            x = surface_center[0] + self.outer_radius * math.cos(rad)
-            y = surface_center[1] - self.outer_radius * math.sin(rad)
+            x = pivot_center[0] + self.outer_radius * math.cos(rad)
+            y = pivot_center[1] - self.outer_radius * math.sin(rad)
             points.append((x, y))
             
         points.append((
-            surface_center[0] + self.outer_radius * math.cos(math.radians(end_angle)),
-            surface_center[1] - self.outer_radius * math.sin(math.radians(end_angle))
+            pivot_center[0] + self.outer_radius * math.cos(math.radians(end_angle)),
+            pivot_center[1] - self.outer_radius * math.sin(math.radians(end_angle))
         ))
 
         for angle in range(int(end_angle), int(start_angle) - 1, -5):
             rad = math.radians(angle)
-            x = surface_center[0] + self.inner_radius * math.cos(rad)
-            y = surface_center[1] - self.inner_radius * math.sin(rad)
+            x = pivot_center[0] + self.inner_radius * math.cos(rad)
+            y = pivot_center[1] - self.inner_radius * math.sin(rad)
             points.append((x, y))
 
         points.append((
-            surface_center[0] + self.inner_radius * math.cos(math.radians(start_angle)),
-            surface_center[1] - self.inner_radius * math.sin(math.radians(start_angle))
+            pivot_center[0] + self.inner_radius * math.cos(math.radians(start_angle)),
+            pivot_center[1] - self.inner_radius * math.sin(math.radians(start_angle))
         ))
 
         if len(points) >= 3:
-            if self.color == 0:
-                pygame.draw.polygon(self.surface, (0, 0, 255), points)
-            else:
-                pygame.draw.polygon(self.surface, (255, 255, 0), points)
-            
-        return self.surface
+            color = (0, 0, 255) if self.color == 0 else (255, 255, 0)
+            pygame.draw.polygon(screen, color, points)
 
 class FloatingText:
     def __init__(self, text, x, y, color):
@@ -291,9 +283,7 @@ while running:
             if zone.is_dead():
                 active_zones.remove(zone)
                 continue
-            sector_surface = zone.get_surface()
-            sector_rect = sector_surface.get_rect(center=pivot_center)                 
-            screen.blit(sector_surface, sector_rect)
+            zone.draw(screen, pivot_center) 
             current_frame_zones.append(zone)
 
         for f_text in floating_texts[::-1]:
@@ -355,6 +345,7 @@ while running:
         else:
             if game_state == "start" or (game_state == "game_over" and restart_cooldown <= 0):
                 game_state = "playing"
+                new_record = False
                 score = 0
                 timer = 30
                 blade_velocity = 2
