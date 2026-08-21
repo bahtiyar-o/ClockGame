@@ -13,7 +13,8 @@ screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 width, height = screen.get_size()
 pygame.display.set_caption("Clock")
 clock = pygame.time.Clock()
-game_font = pygame.font.Font(None, 80)
+game_font = pygame.font.Font(None, 220)
+text_font = pygame.font.Font(None, 110)
 
 # 2. Android-safe absolute pathing
 try:
@@ -87,8 +88,7 @@ class Zone:
         self.shrink_speed = 6.0 
         self.outer_radius = blade_length
         self.inner_radius = (3 * self.outer_radius) / 4
-        self.color = random.randint(0, 4) 
-        # Removed the heavy SRCALPHA surface entirely!
+        self.color = random.randint(0, 4)
 
     def update(self, dt):
         self.sweep_angle -= self.shrink_speed * dt
@@ -178,14 +178,13 @@ active_zones = []
 angle_cd = {}
 floating_texts = []
 
-title = game_font.render("CLOCK GAME", True, (255, 255, 255))
-rule1 = game_font.render("Tap to strike blocks", True, (200, 200, 200))
-rule2 = game_font.render("Yellow: +1 Score", True, (255, 255, 0))
-rule3 = game_font.render("Blue: +1 Score, +2 Seconds", True, (100, 150, 255))
-start_prompt = game_font.render("Tap anywhere to start!", True, (0, 255, 0))
-game_over_text = game_font.render("Game Over!", True, (255, 0, 0))
-high_score_text = game_font.render(f"High Score: {int(high_score)}", True, (255, 215, 0))
-restart_prompt = game_font.render("Tap to Restart", True, (0, 255, 0))
+rule1 = text_font.render("TAP TO STRIKE BLOCKS", True, (255, 255, 255))
+rule2 = text_font.render("YELLOW: +1 SCORE", True, (255, 255, 0))
+rule3 = text_font.render("BLUE: +1 SCORE, +2 TIME", True, (0, 0, 255))
+start_prompt = text_font.render("TAP TO START!", True, (0, 255, 0))
+game_over_text = text_font.render("GAME OVER!", True, (255, 0, 0))
+high_score_text = text_font.render(f"HIGH SCORE: {int(high_score)}", True, (255, 215, 0))
+restart_prompt = text_font.render("TAP TO RESTART!", True, (0, 255, 0))
 
 
 game_state = "start" 
@@ -198,34 +197,35 @@ while running:
     screen.fill((30, 30, 30))
 
     if game_state == "start":
-        screen.blit(title, title.get_rect(center=(width // 2, height // 2 - 220)))
-        screen.blit(rule1, rule1.get_rect(center=(width // 2, height // 2 - 90)))
-        screen.blit(rule2, rule2.get_rect(center=(width // 2, height // 2 - 20)))
-        screen.blit(rule3, rule3.get_rect(center=(width // 2, height // 2 + 50)))
-        screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 180)))
+        screen.blit(rule1, rule1.get_rect(center=(width // 2, height // 2 - 320)))
+        screen.blit(rule2, rule2.get_rect(center=(width // 2, height // 2 - 200)))
+        screen.blit(rule3, rule3.get_rect(center=(width // 2, height // 2 -80)))
+        screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 120)))
         if pygame.time.get_ticks() % 1000 < 500:
-            screen.blit(start_prompt, start_prompt.get_rect(center=(width // 2, height // 2 + 310)))
+            screen.blit(start_prompt, start_prompt.get_rect(center=(width // 2, height // 2 + 320)))
 
     elif game_state == "game_over":
         if restart_cooldown > 0:
             restart_cooldown -= dt
 
-        screen.blit(game_over_text, game_over_text.get_rect(center=(width // 2, height // 2 - 120)))
-        if pygame.time.get_ticks() % 1000 < 500:
-            screen.blit(restart_prompt, restart_prompt.get_rect(center=(width // 2, height // 2 + 250)))
-        
         if new_record == True:
-            screen.blit(score_text, score_text.get_rect(center=(width // 2, height // 2 + 60)))
+            screen.blit(game_over_text, game_over_text.get_rect(center=(width // 2, height // 2 - 160)))
+            screen.blit(score_text, score_text.get_rect(center=(width // 2, height // 2 - 40)))
+            if pygame.time.get_ticks() % 1000 < 500:
+                screen.blit(restart_prompt, restart_prompt.get_rect(center=(width // 2, height // 2 + 160)))
         else:
-            screen.blit(score_text, score_text.get_rect(center=(width // 2, height // 2)))
-            screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 120)))
+            screen.blit(game_over_text, game_over_text.get_rect(center=(width // 2, height // 2 - 220)))
+            screen.blit(score_text, score_text.get_rect(center=(width // 2, height // 2 - 100)))
+            screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 20)))
+            if pygame.time.get_ticks() % 1000 < 500:
+                screen.blit(restart_prompt, restart_prompt.get_rect(center=(width // 2, height // 2 + 220)))
 
     elif game_state == "playing":
         timer -= dt
         if timer <= 0:
             timer = 0
-            score_text = game_font.render(f"Score: {int(score)}", True, (255, 255, 255))
-            high_score_text = game_font.render(f"High Score: {int(high_score)}", True, (255, 215, 0))
+            score_text = text_font.render(f"SCORE: {int(score)}", True, (255, 255, 255))
+            high_score_text = text_font.render(f"HIGH SCORE: {int(high_score)}", True, (255, 215, 0))
             game_state = "game_over"
             game_over_snd.play()
             restart_cooldown = 0.5
@@ -233,7 +233,7 @@ while running:
                 high_score = score
                 save_high_score(high_score)
                 new_record = True
-                score_text = game_font.render(f"New High Score: {int(score)}!", True, (255, 215, 0))
+                score_text = text_font.render(f"NEW HIGH SCORE: {int(score)}", True, (255, 215, 0))
         
         mode_counter -= dt
         if mode_counter <= 0:
@@ -273,9 +273,9 @@ while running:
         pygame.draw.line(screen, blade_color, pivot_center, (tip_x, tip_y), blade_thickness)
         
         score_surface = game_font.render(f"{int(score)}", True, (255, 255, 255))
-        screen.blit(score_surface, score_surface.get_rect(center=(width // 2, 80)))
+        screen.blit(score_surface, score_surface.get_rect(center=(width // 2, 140)))
         timer_surface = game_font.render(f"{timer:.1f}", True, (255, 255, 255))
-        screen.blit(timer_surface, timer_surface.get_rect(center=(width // 2, height - 80)))
+        screen.blit(timer_surface, timer_surface.get_rect(center=(width // 2, height - 140)))
 
         current_frame_zones = []
         for zone in active_zones[::-1]:
@@ -325,7 +325,7 @@ while running:
                             
                         if zone.color == 0:
                             timer += 2
-                            floating_texts.append(FloatingText("+2", width // 2, height - 150, (100, 150, 255)))
+                            floating_texts.append(FloatingText("+2", width // 2, height - 250, (0, 0, 255)))
                             hit_blue_snd.play()
                         else:
                             hit_yellow_snd.play()
@@ -352,6 +352,7 @@ while running:
                 blade_angle = 90
                 active_zones.clear()
                 angle_cd.clear()
+                floating_texts.clear()
                 mode_counter = random.randint(7,9)
                 lower_bound = 600
                 upper_bound = 1400
