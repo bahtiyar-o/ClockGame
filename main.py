@@ -55,10 +55,10 @@ except Exception as e:
 
 try:
     raw_icon = pygame.image.load(resource_path("restart_icon.png")).convert_alpha()
-    restart_img = pygame.transform.smoothscale(raw_icon, (60, 60))
+    restart_img = pygame.transform.smoothscale(raw_icon, (140, 140))
 except Exception as e:
     print(f"Icon Load Error: {e}")
-    restart_img = pygame.Surface((60, 60), pygame.SRCALPHA)
+    restart_img = pygame.Surface((140, 140), pygame.SRCALPHA)
     pygame.draw.circle(restart_img, (150, 150, 150), (30, 30), 30)
 
 def load_high_score():
@@ -180,7 +180,10 @@ high_score = load_high_score()
 pivot_center = (width / 2, height / 2)
 timer_default = 30
 blade_max_velocity = 2
-blade_length = (4 * width) / 10
+if height > width:
+    blade_length = (4 * width) / 10
+else:
+    blade_length = (4 * height) / 10
 blade_thickness = 7
 blade_acc = 0.05
 lower_bound_default = 600
@@ -193,6 +196,7 @@ active_zones = []
 angle_cd = {}
 floating_texts = []
 
+restart_button = restart_img.get_rect(center=(width - 140, 140))
 rule1 = text_font.render("TAP TO STRIKE", True, (255, 255, 255))
 rule2 = text_font.render("YELLOW: +1 SCORE", True, (255, 255, 0))
 rule3 = text_font.render("BLUE: +1 SCORE, +2 TIME", True, (0, 0, 255))
@@ -200,7 +204,7 @@ start_prompt = text_font.render("TAP TO START!", True, (0, 255, 0))
 game_over_text = text_font.render("GAME OVER!", True, (255, 0, 0))
 high_score_text = text_font.render(f"HIGH SCORE: {int(high_score)}", True, (255, 215, 0))
 restart_prompt = text_font.render("TAP TO RESTART!", True, (0, 255, 0))
-restart_button = restart_img.get_rect(topright=(width - 60, 60))
+
 
 
 game_state = "start" 
@@ -274,10 +278,15 @@ while running:
         pygame.draw.line(screen, blade_color, pivot_center, (tip_x, tip_y), blade_thickness)
         
         score_surface = game_font.render(f"{int(score)}", True, (255, 255, 255))
-        screen.blit(score_surface, score_surface.get_rect(center=(width // 2, 140)))
+        if height > width:
+            screen.blit(score_surface, score_surface.get_rect(center=(width // 2, 140)))
+        else:
+            screen.blit(score_surface, score_surface.get_rect(center=(200, height // 2)))
         timer_surface = game_font.render(f"{timer:.1f}", True, (255, 255, 255))
-        screen.blit(timer_surface, timer_surface.get_rect(center=(width // 2, height - 140)))
-
+        if height > width:
+            screen.blit(timer_surface, timer_surface.get_rect(center=(width // 2, height - 140)))
+        else:
+            screen.blit(timer_surface, timer_surface.get_rect(center=(width - 200, height // 2)))
         current_frame_zones = []
         for zone in active_zones[::-1]:
             zone.update(dt)
@@ -360,7 +369,10 @@ while running:
                             
                         if zone.color == 0:
                             timer += 2
-                            floating_texts.append(FloatingText("+2", width // 2, height - 250, (0, 0, 255)))
+                            if height > width:
+                                floating_texts.append(FloatingText("+2", width // 2, height - 250, (0, 0, 255)))
+                            else:
+                                floating_texts.append(FloatingText("+2", width - 200, height // 2 - 100, (0, 0, 255)))
                             hit_blue_snd.play()
                         else:
                             hit_yellow_snd.play()
