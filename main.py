@@ -53,6 +53,14 @@ except Exception as e:
     print(f"Audio Load Error: {e}")
     hit_yellow_snd = hit_blue_snd = miss_snd = game_over_snd = MockSound()
 
+try:
+    raw_icon = pygame.image.load(resource_path("restart_icon.png")).convert_alpha()
+    restart_img = pygame.transform.smoothscale(raw_icon, (60, 60))
+except Exception as e:
+    print(f"Icon Load Error: {e}")
+    restart_img = pygame.Surface((60, 60), pygame.SRCALPHA)
+    pygame.draw.circle(restart_img, (150, 150, 150), (30, 30), 30)
+
 def load_high_score():
     if os.path.exists(save_file_path):
         try:
@@ -70,16 +78,29 @@ def save_high_score(new_score):
         print(f"Failed to save score: {e}")
 
 
-def is_blade_hitting_zone(blade_angle, zone):
-    normalized_blade = blade_angle % 360
-    half_sweep = zone.sweep_angle / 2
-    start_angle = (zone.center_angle - half_sweep) % 360
-    end_angle = (zone.center_angle + half_sweep) % 360
-    
-    if start_angle < end_angle:
-        return start_angle <= normalized_blade <= end_angle
-    else:
-        return normalized_blade >= start_angle or normalized_blade <= end_angle
+class FloatingText:
+    def __init__(self, text, x, y, color):
+        self.text = text
+        self.x = x
+        self.y = float(y)
+        self.color = color
+        self.alpha = 255
+        self.speed = 40
+        self.fade_speed = 255
+
+    def update(self, dt):
+        self.y -= self.speed * dt
+        self.alpha -= self.fade_speed * dt
+
+    def is_dead(self):
+        return self.alpha <= 0
+
+    def draw(self, surface, font):
+        if self.alpha > 0:
+            text_surf = font.render(self.text, True, self.color)
+            text_surf.set_alpha(int(self.alpha)) 
+            rect = text_surf.get_rect(center=(self.x, int(self.y)))
+            surface.blit(text_surf, rect)
 
 class Zone:
     def __init__(self, angle):
@@ -129,30 +150,6 @@ class Zone:
             color = (0, 0, 255) if self.color == 0 else (255, 255, 0)
             pygame.draw.polygon(screen, color, points)
 
-class FloatingText:
-    def __init__(self, text, x, y, color):
-        self.text = text
-        self.x = x
-        self.y = float(y)
-        self.color = color
-        self.alpha = 255
-        self.speed = 40
-        self.fade_speed = 255
-
-    def update(self, dt):
-        self.y -= self.speed * dt
-        self.alpha -= self.fade_speed * dt
-
-    def is_dead(self):
-        return self.alpha <= 0
-
-    def draw(self, surface, font):
-        if self.alpha > 0:
-            text_surf = font.render(self.text, True, self.color)
-            text_surf.set_alpha(int(self.alpha)) 
-            rect = text_surf.get_rect(center=(self.x, int(self.y)))
-            surface.blit(text_surf, rect)
-
 def spawn_zone():
     available_angles = []
     for i in range(18):
@@ -166,25 +163,44 @@ def spawn_zone():
         active_zones.append(new_zone)
         angle_cd[chosen_angle] = 3.2
 
+def is_blade_hitting_zone(blade_angle, zone):
+    normalized_blade = blade_angle % 360
+    half_sweep = zone.sweep_angle / 2
+    start_angle = (zone.center_angle - half_sweep) % 360
+    end_angle = (zone.center_angle + half_sweep) % 360
+    
+    if start_angle < end_angle:
+        return start_angle <= normalized_blade <= end_angle
+    else:
+        return normalized_blade >= start_angle or normalized_blade <= end_angle
+
+
 # Variables
 high_score = load_high_score()
 pivot_center = (width / 2, height / 2)
+timer_default = 30
+blade_max_velocity = 2
 blade_length = (4 * width) / 10
 blade_thickness = 7
 blade_acc = 0.05
+lower_bound_default = 600
+upper_bound_default = 1400
+lower_bound_fast = 400
+upper_bound_fast = 1150
 zone_spawn = pygame.USEREVENT
 
 active_zones = []
 angle_cd = {}
 floating_texts = []
 
-rule1 = text_font.render("TAP TO STRIKE BLOCKS", True, (255, 255, 255))
+rule1 = text_font.render("TAP TO STRIKE", True, (255, 255, 255))
 rule2 = text_font.render("YELLOW: +1 SCORE", True, (255, 255, 0))
 rule3 = text_font.render("BLUE: +1 SCORE, +2 TIME", True, (0, 0, 255))
 start_prompt = text_font.render("TAP TO START!", True, (0, 255, 0))
 game_over_text = text_font.render("GAME OVER!", True, (255, 0, 0))
 high_score_text = text_font.render(f"HIGH SCORE: {int(high_score)}", True, (255, 215, 0))
 restart_prompt = text_font.render("TAP TO RESTART!", True, (0, 255, 0))
+restart_button = restart_img.get_rect(topright=(width - 60, 60))
 
 
 game_state = "start" 
@@ -222,28 +238,15 @@ while running:
 
     elif game_state == "playing":
         timer -= dt
-        if timer <= 0:
-            timer = 0
-            score_text = text_font.render(f"SCORE: {int(score)}", True, (255, 255, 255))
-            high_score_text = text_font.render(f"HIGH SCORE: {int(high_score)}", True, (255, 215, 0))
-            game_state = "game_over"
-            game_over_snd.play()
-            restart_cooldown = 0.5
-            if score > high_score:
-                high_score = score
-                save_high_score(high_score)
-                new_record = True
-                score_text = text_font.render(f"NEW HIGH SCORE: {int(score)}", True, (255, 215, 0))
-        
         mode_counter -= dt
         if mode_counter <= 0:
             mode_counter = random.randint(7,9)
-            if lower_bound == 600:
-                lower_bound -= 200
-                upper_bound -= 250
+            if lower_bound == lower_bound_default:
+                lower_bound = lower_bound_fast
+                upper_bound = upper_bound_fast
             else:
-                lower_bound += 200
-                upper_bound += 250
+                lower_bound = lower_bound_default
+                upper_bound = upper_bound_default
 
         angles_to_remove = []
         for angle in angle_cd:
@@ -254,18 +257,16 @@ while running:
             del angle_cd[angle]
 
         speed_factor = dt * 60
-        if 0 < blade_velocity < 2:
+        if 0 < blade_velocity < blade_max_velocity:
             blade_velocity += blade_acc * speed_factor
-        elif -2 < blade_velocity < 0:
+        elif -blade_max_velocity < blade_velocity < 0:
             blade_velocity -= blade_acc * speed_factor
-        elif blade_velocity > 2:
-            blade_velocity = 2
-        elif blade_velocity < -2:
-            blade_velocity = -2
-            
+        elif blade_velocity > blade_max_velocity:
+            blade_velocity = blade_max_velocity
+        elif blade_velocity < -blade_max_velocity:
+            blade_velocity = -blade_max_velocity
         blade_angle += blade_velocity * speed_factor
-        
-        blade_color = (0, 255, 0) if abs(blade_velocity) == 2 else (255, 0, 0)
+        blade_color = (0, 255, 0) if abs(blade_velocity) == blade_max_velocity else (255, 0, 0)
         
         rad = math.radians(blade_angle)
         tip_x = pivot_center[0] + blade_length * math.cos(rad)
@@ -293,8 +294,24 @@ while running:
             else:
                 f_text.draw(screen, game_font)
 
+        screen.blit(restart_img, restart_button)
+
+        if timer <= 0:
+            timer = 0
+            score_text = text_font.render(f"SCORE: {int(score)}", True, (255, 255, 255))
+            high_score_text = text_font.render(f"HIGH SCORE: {int(high_score)}", True, (255, 215, 0))
+            restart_cooldown = 0.5
+            game_state = "game_over"
+            game_over_snd.play()
+            if score > high_score:
+                high_score = score
+                save_high_score(high_score)
+                new_record = True
+                score_text = text_font.render(f"NEW HIGH SCORE: {int(score)}", True, (255, 215, 0))
+
 
     tapped_this_frame = False
+    tap_pos = None
     
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -308,14 +325,32 @@ while running:
             
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
             tapped_this_frame = True
+            tap_pos = (width // 2, height // 2)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             tapped_this_frame = True
+            tap_pos = event.pos
         if getattr(pygame, 'FINGERDOWN', None) is not None and event.type == pygame.FINGERDOWN:
             tapped_this_frame = True
+            tap_pos = (event.x * width, event.y * height)
 
     if tapped_this_frame:
         if game_state == "playing":
-            if abs(blade_velocity) >= 2:
+            if tap_pos and restart_button.collidepoint(tap_pos):
+                new_record = False
+                game_over_snd.play()
+                score = 0
+                timer = timer_default
+                blade_velocity = blade_max_velocity
+                blade_angle = 90
+                active_zones.clear()
+                angle_cd.clear()
+                floating_texts.clear()
+                mode_counter = random.randint(7,9)
+                lower_bound = lower_bound_default
+                upper_bound = upper_bound_default
+                pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
+
+            elif abs(blade_velocity) >= blade_max_velocity:
                 hit_successful = False 
                 for zone in current_frame_zones:
                     if is_blade_hitting_zone(blade_angle, zone):
@@ -331,9 +366,9 @@ while running:
                             hit_yellow_snd.play()
                             
                         if blade_velocity > 0:
-                            blade_velocity = -2
+                            blade_velocity = -blade_max_velocity
                         else:
-                            blade_velocity = 2
+                            blade_velocity = blade_max_velocity
                             
                         hit_successful = True 
                         break 
@@ -347,15 +382,15 @@ while running:
                 game_state = "playing"
                 new_record = False
                 score = 0
-                timer = 30
-                blade_velocity = 2
+                timer = timer_default
+                blade_velocity = blade_max_velocity
                 blade_angle = 90
                 active_zones.clear()
                 angle_cd.clear()
                 floating_texts.clear()
                 mode_counter = random.randint(7,9)
-                lower_bound = 600
-                upper_bound = 1400
+                lower_bound = lower_bound_default
+                upper_bound = upper_bound_default
                 pygame.time.set_timer(zone_spawn, random.randint(lower_bound, upper_bound))
 
     pygame.display.update()
