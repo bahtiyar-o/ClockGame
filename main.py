@@ -45,11 +45,11 @@ try:
     font_path = resource_path("font.ttf")
     game_font = pygame.font.Font(font_path, 80)
     text_font = pygame.font.Font(font_path, 60)
-    title_font = pygame.font.Font(font_path, 110)
+    title_font = pygame.font.Font(font_path, 140)
 except Exception as e:
     game_font = pygame.font.Font(None, 80)
     text_font = pygame.font.Font(None, 60)
-    title_font = pygame.font.Font(None, 110)
+    title_font = pygame.font.Font(None, 140)
 
 try:
     raw_menu = pygame.image.load(resource_path("icon_menu.png")).convert_alpha()
@@ -257,9 +257,9 @@ def apply_theme(theme_name):
         update_icon_colors()
 
 def render_texts(score = 0):
-    global text_tapto, text_strike, text_taptostart, text_game, text_over, text_hiscore, text_newhiscore, text_taptorestart, high_score_text, score_text
-    text_tapto = title_font.render("TAP TO", True, color_time)
-    text_strike = title_font.render("STRIKE", True, color_time)
+    global text_start, text_game0, text_taptostart, text_game, text_over, text_hiscore, text_newhiscore, text_taptorestart, high_score_text, score_text
+    text_start = title_font.render("START", True, color_time)
+    text_game0 = title_font.render("GAME", True, color_time)
     text_taptostart = text_font.render("TAP TO START!", True, color_blade)
     text_game = title_font.render("GAME", True, color_miss)
     text_over = title_font.render("OVER", True, color_miss)
@@ -319,6 +319,20 @@ themes = {
         "miss": (214, 40, 40),
         "time": (234, 226, 183),
         "bg": (0, 48, 73)
+    },
+        "toxic": {
+        "blade": (11,97,11),    # Neon green
+        "score": 	(1,223,1),  # Pale green
+        "miss": (106,8,136),     # Bright magenta
+        "time": 	(137,4,177),     # Cyan
+        "bg": (15, 15, 20)         # Deep charcoal
+    },
+        "crimson": {
+        "blade": (119,64,57),
+        "score": (170,157,135),
+        "miss": (84,9,22),	
+        "time": (80,54,58),
+        "bg": (42,38,37)
     }
 }
 
@@ -367,8 +381,8 @@ while running:
     screen.blit(menu_img, menu_button)
     
     if game_state == "start":
-        screen.blit(text_tapto, text_tapto.get_rect(center=(width // 2, height // 2 - 80)))
-        screen.blit(text_strike, text_strike.get_rect(center=(width // 2, height // 2 + 80)))
+        screen.blit(text_start, text_start.get_rect(center=(width // 2, height // 2 - 80)))
+        screen.blit(text_game0, text_game0.get_rect(center=(width // 2, height // 2 + 80)))
         screen.blit(text_hiscore, text_hiscore.get_rect(center=(width // 2, 100)))
         screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, 190)))
         if pygame.time.get_ticks() % 1000 < 500:
@@ -391,16 +405,16 @@ while running:
 
     elif game_state == "menu":
         menu_title = title_font.render("THEMES", True, color_score)
-        screen.blit(menu_title, menu_title.get_rect(center=(width // 2, 220)))
+        screen.blit(menu_title, menu_title.get_rect(center=(width // 2, 340)))
         if is_muted:
             screen.blit(mute_on_img, mute_button)
         else:
             screen.blit(mute_off_img, mute_button)
 
         theme_rects = {}
-        theme_list = ["cyberpunk", "space odyssey", "soft", "pastel", "autumn", "high contrast", "mono"] 
+        theme_list = ["crimson", "toxic", "cyberpunk", "space odyssey", "soft", "pastel", "autumn", "high contrast", "mono"] 
 
-        start_y = height // 2 - 150
+        start_y = height // 2 - 300
         spacing = 90
     
         for i, t_name in enumerate(theme_list):
