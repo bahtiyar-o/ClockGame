@@ -12,8 +12,7 @@ screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 width, height = screen.get_size()
 pygame.display.set_caption("Clock Game")
 clock = pygame.time.Clock()
-game_font = pygame.font.Font(None, 220)
-text_font = pygame.font.Font(None, 110)
+
 
 try:
     base_path = sys._MEIPASS
@@ -34,46 +33,59 @@ save_file_path = os.path.join(save_dir, "highscore.txt")
 class MockSound:
     def play(self): pass
 try:
-    hit_yellow_snd = pygame.mixer.Sound(resource_path("yellow.wav"))
-    hit_blue_snd = pygame.mixer.Sound(resource_path("blue.wav"))
-    miss_snd = pygame.mixer.Sound(resource_path("miss.wav"))
-    game_over_snd = pygame.mixer.Sound(resource_path("end.wav"))
+    hit_yellow_snd = pygame.mixer.Sound(resource_path("sound_yellow.wav"))
+    hit_blue_snd = pygame.mixer.Sound(resource_path("sound_blue.wav"))
+    miss_snd = pygame.mixer.Sound(resource_path("sound_miss.wav"))
+    game_over_snd = pygame.mixer.Sound(resource_path("sound_end.wav"))
+    click_snd = pygame.mixer.Sound(resource_path("sound_click.wav"))
 except Exception as e:
-    print(f"Audio Load Error: {e}")
-    hit_yellow_snd = hit_blue_snd = miss_snd = game_over_snd = MockSound()
+    hit_yellow_snd = hit_blue_snd = miss_snd = game_over_snd = click_snd = MockSound()
 
 try:
-    raw_icon = pygame.image.load(resource_path("restart_icon.png")).convert_alpha()
-    restart_img = pygame.transform.smoothscale(raw_icon, (140, 140))
+    font_path = resource_path("font.ttf")
+    game_font = pygame.font.Font(font_path, 80)
+    text_font = pygame.font.Font(font_path, 60)
+    title_font = pygame.font.Font(font_path, 110)
 except Exception as e:
-    print(f"Icon Load Error: {e}")
-    restart_img = pygame.Surface((140, 140), pygame.SRCALPHA)
-    pygame.draw.circle(restart_img, (150, 150, 150), (30, 30), 30)
+    game_font = pygame.font.Font(None, 80)
+    text_font = pygame.font.Font(None, 60)
+    title_font = pygame.font.Font(None, 110)
+
 try:
-    raw_mute_off = pygame.image.load(resource_path("mute_off.png")).convert_alpha()
-    mute_off_img = pygame.transform.smoothscale(raw_mute_off, (140, 140))
-    raw_mute_on = pygame.image.load(resource_path("mute_on.png")).convert_alpha()
-    mute_on_img = pygame.transform.smoothscale(raw_mute_on, (140, 140))
+    raw_menu = pygame.image.load(resource_path("icon_menu.png")).convert_alpha()
+    base_menu = pygame.transform.smoothscale(raw_menu, (140, 140))
+    raw_restart = pygame.image.load(resource_path("icon_restart.png")).convert_alpha()
+    base_restart = pygame.transform.smoothscale(raw_restart, (140, 140))
+    raw_mute = pygame.image.load(resource_path("icon_mute.png")).convert_alpha()
+    base_mute = pygame.transform.smoothscale(raw_mute, (120, 120))
+
 except Exception as e:
-    print(f"Mute Icon Load Error: {e}")
-    mute_off_img = pygame.Surface((140, 140), pygame.SRCALPHA)
-    pygame.draw.circle(mute_off_img, (150, 150, 150), (70, 70), 50)
-    mute_on_img = pygame.Surface((140, 140), pygame.SRCALPHA)
-    pygame.draw.circle(mute_on_img, (255, 100, 100), (70, 70), 50)
+    base_menu = pygame.Surface((140, 140), pygame.SRCALPHA)
+    base_menu.fill((150, 150, 150))
+    base_restart = pygame.Surface((180, 180), pygame.SRCALPHA)
+    base_restart.fill((150, 150, 150))
+    base_mute = pygame.Surface((140, 140), pygame.SRCALPHA)
+    base_mute.fill((150, 150, 150))
 
 def load_save_data():
     if os.path.exists(save_file_path):
         try:
             with open(save_file_path, "r") as file:
                 data = file.read().strip().split(',')
-                return int(data[0]), data[1] == "True"
+                if len(data) == 3:
+                    return int(data[0]), data[1] == "True", data[2]
+                elif len(data) == 2:
+                    return int(data[0]), data[1] == "True", "space odyssey"
+                elif len(data) == 1:
+                    return int(data[0]), False, "space odyssey"
         except:
-            return 0, False
-    return 0, False
-def save_game_data(new_score, muted_state):
+            return 0, False, "space odyssey"
+    return 0, False, "space odyssey"
+
+def save_game_data(new_score, muted_state, theme_name):
     try:
         with open(save_file_path, "w") as file:
-            file.write(f"{int(new_score)},{muted_state}")
+            file.write(f"{int(new_score)},{muted_state},{theme_name}")
     except Exception as e:
         print(f"Failed to save data: {e}")
 
@@ -127,10 +139,8 @@ class Zone:
         start_angle = self.center_angle - half_sweep
         end_angle = self.center_angle + half_sweep
 
-        # Pre-calculate trigonometry for the exact corners to save CPU cycles
         rad_start = math.radians(start_angle)
-        rad_end = math.radians(end_angle)
-        
+        rad_end = math.radians(end_angle)        
         cos_start = math.cos(rad_start)
         sin_start = math.sin(rad_start)
         cos_end = math.cos(rad_end)
@@ -138,13 +148,11 @@ class Zone:
 
         points = []
         
-        # 1. Exact Start Point (Outer)
         points.append((
             pivot_center[0] + self.outer_radius * cos_start,
             pivot_center[1] - self.outer_radius * sin_start
         ))
 
-        # 2. Smooth internal points (Outer)
         first_int = math.ceil(start_angle)
         last_int = math.floor(end_angle)
         for angle in range(first_int, last_int + 1, 2): 
@@ -153,20 +161,17 @@ class Zone:
                 pivot_center[0] + self.outer_radius * math.cos(rad),
                 pivot_center[1] - self.outer_radius * math.sin(rad)
             ))
-            
-        # 3. Exact End Point (Outer)
+
         points.append((
             pivot_center[0] + self.outer_radius * cos_end,
             pivot_center[1] - self.outer_radius * sin_end
         ))
 
-        # 4. Exact End Point (Inner)
         points.append((
             pivot_center[0] + self.inner_radius * cos_end,
             pivot_center[1] - self.inner_radius * sin_end
         ))
 
-        # 5. Smooth internal points (Inner)
         for angle in range(last_int, first_int - 1, -2):
             rad = math.radians(angle)
             points.append((
@@ -174,20 +179,16 @@ class Zone:
                 pivot_center[1] - self.inner_radius * math.sin(rad)
             ))
 
-        # 6. Exact Start Point (Inner)
         points.append((
             pivot_center[0] + self.inner_radius * cos_start,
             pivot_center[1] - self.inner_radius * sin_start
         ))
 
-        # 7. Draw the polygon with dynamic color fading
         if len(points) >= 3:
-            fade_ratio = max(0.3, self.sweep_angle / 20.0)
-            
             if self.color == 0:
-                current_color = (0, 0, int(255 * fade_ratio))
+                current_color = color_time
             else:
-                current_color = (int(255 * fade_ratio), int(255 * fade_ratio), 0)
+                current_color = color_score
                 
             pygame.draw.polygon(screen, current_color, points)
 
@@ -199,12 +200,12 @@ def restart_game():
     score = 0
     timer = timer_default
     blade_velocity = blade_max_velocity
-    blade_angle = random.randint(0, 359)
+    blade_angle = 90
     shake_duration = 0.0
     active_zones.clear()
     angle_cd.clear()
     floating_texts.clear()
-    current_score_surface = game_font.render("0", True, (255, 255, 255))
+    current_score_surface = game_font.render("0", True, color_score)
     pygame.time.set_timer(zone_spawn, 500)
 
 def spawn_zone(timer):
@@ -231,9 +232,103 @@ def is_blade_hitting_zone(blade_angle, zone):
     else:
         return normalized_blade >= start_angle or normalized_blade <= end_angle
 
+def colorize_icon(image, color):
+    tinted_image = image.copy()
+    tinted_image.fill(color, special_flags=pygame.BLEND_RGBA_MULT)
+    return tinted_image
+
+def update_icon_colors():
+    global menu_img, restart_img, mute_off_img, mute_on_img
+    menu_img = colorize_icon(base_menu, color_blade)
+    restart_img = colorize_icon(base_restart, color_blade)
+    mute_off_img = colorize_icon(base_mute, color_blade)
+    mute_on_img = colorize_icon(base_mute, color_miss)
+
+def apply_theme(theme_name):
+    global color_blade, color_score, color_miss, color_time, color_bg, current_theme_name
+    if theme_name in themes:
+        current_theme_name = theme_name
+        selected = themes[theme_name]
+        color_blade = selected["blade"]
+        color_score = selected["score"]
+        color_miss  = selected["miss"]
+        color_time  = selected["time"]
+        color_bg    = selected["bg"]
+        update_icon_colors()
+
+def render_texts(score = 0):
+    global text_tapto, text_strike, text_taptostart, text_game, text_over, text_hiscore, text_newhiscore, text_taptorestart, high_score_text, score_text
+    text_tapto = title_font.render("TAP TO", True, color_time)
+    text_strike = title_font.render("STRIKE", True, color_time)
+    text_taptostart = text_font.render("TAP TO START!", True, color_blade)
+    text_game = title_font.render("GAME", True, color_miss)
+    text_over = title_font.render("OVER", True, color_miss)
+    text_hiscore = text_font.render("HI- SCORE", True, color_blade)
+    text_newhiscore = text_font.render("NEW HI- SCORE!", True, color_score)
+    text_taptorestart = text_font.render("TAP TO RESTART!", True, color_blade)
+    high_score_text = text_font.render(f"{int(high_score)}", True, color_score)
+    score_text = text_font.render(f"SCORE: {int(score)}", True, color_score)
+
+
+themes = {
+    "space odyssey": {
+        "blade": (138, 43, 226),
+        "score": (255, 215, 0),
+        "miss": (255, 69, 0),
+        "time": (0, 191, 255),
+        "bg": (30, 30, 30)
+    },
+    "cyberpunk": {
+        "blade": (255, 0, 85),
+        "score": (0, 255, 255),
+        "miss": (255, 255, 0),
+        "time": (0, 255, 170),
+        "bg": (15, 10, 30)
+    },
+    "mono": {
+        "blade": (200, 200, 200),
+        "score": (255, 255, 255),
+        "miss": (150, 150, 150),
+        "time": (100, 100, 100),
+        "bg": (10, 10, 10)
+    },
+        "soft": {
+        "blade": (180, 255, 159),
+        "score": (255, 243, 176),
+        "miss": (255, 158, 203),
+        "time": (155, 231, 255),
+        "bg": (22, 18, 31)
+    },
+        "high contrast": {
+        "blade": (0, 255, 0),
+        "score": (255, 255, 0),
+        "miss": (255, 0, 0),
+        "time": (0, 0, 255),
+        "bg": (0, 0, 0)
+    },
+        "pastel": {
+        "blade": (255, 159, 159),  # FF9F9F
+        "score": (255, 198, 168),  # FFC6A8
+        "miss": (255, 227, 163),   # FFE3A3
+        "time": (201, 242, 199),   # C9F2C7
+        "bg": (139, 211, 230)      # 8BD3E6
+    },
+        "autumn": {
+        "blade": (252, 191, 73),
+        "score": (208, 148, 56),
+        "miss": (214, 40, 40),
+        "time": (234, 226, 183),
+        "bg": (0, 48, 73)
+    }
+}
 
 # Variables
-high_score, is_muted = load_save_data()
+high_score, is_muted, current_theme_name = load_save_data()
+color_blade = themes[current_theme_name]["blade"]
+color_score = themes[current_theme_name]["score"]
+color_miss  = themes[current_theme_name]["miss"]
+color_time  = themes[current_theme_name]["time"]
+color_bg    = themes[current_theme_name]["bg"]
 pivot_center = (width / 2, height / 2)
 timer_default = 30
 blade_max_velocity = 2
@@ -243,28 +338,24 @@ else:
     blade_length = (4 * height) / 10
 blade_thickness = 7
 blade_acc = 0.05
-zone_spawn = pygame.USEREVENT
 
+
+zone_spawn = pygame.USEREVENT
 active_zones = []
 angle_cd = {}
 floating_texts = []
-
+update_icon_colors()
 restart_button = restart_img.get_rect(center=(width - 140, 140))
-mute_button = mute_off_img.get_rect(center=(140, 140))
-rule1 = text_font.render("TAP TO STRIKE", True, (255, 255, 255))
-rule2 = text_font.render("YELLOW: +1 SCORE", True, (255, 255, 0))
-rule3 = text_font.render("BLUE: +1 SCORE, +2 TIME", True, (0, 0, 255))
-start_prompt = text_font.render("TAP TO START!", True, (0, 255, 0))
-game_over_text = text_font.render("GAME OVER!", True, (255, 0, 0))
-high_score_text = text_font.render(f"HIGH SCORE: {int(high_score)}", True, (255, 215, 0))
-restart_prompt = text_font.render("TAP TO RESTART!", True, (0, 255, 0))
-
-
+mute_button = mute_on_img.get_rect(center=(width - 140, 140))
+menu_button = menu_img.get_rect(center=(140, 140))
 game_state = "start"
+previous_state = "start"
 time_elapsed = 0.0
 restart_cooldown = 0.0
 shake_duration = 0.0
-current_score_surface = game_font.render("0", True, (255, 255, 255))
+resume_countdown = 0.0
+render_texts()
+current_score_surface = game_font.render("0", True, color_score)
 running = True
 new_record = False
 
@@ -272,31 +363,63 @@ while running:
     dt = clock.tick(FPS) / 1000.0
     if dt > 0.05:
             dt = 0.05
-    screen.fill((30, 30, 30))
-
+    screen.fill(color_bg)
+    screen.blit(menu_img, menu_button)
+    
     if game_state == "start":
-        screen.blit(rule1, rule1.get_rect(center=(width // 2, height // 2 - 320)))
-        screen.blit(rule2, rule2.get_rect(center=(width // 2, height // 2 - 200)))
-        screen.blit(rule3, rule3.get_rect(center=(width // 2, height // 2 -80)))
-        screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 120)))
+        screen.blit(text_tapto, text_tapto.get_rect(center=(width // 2, height // 2 - 80)))
+        screen.blit(text_strike, text_strike.get_rect(center=(width // 2, height // 2 + 80)))
+        screen.blit(text_hiscore, text_hiscore.get_rect(center=(width // 2, 100)))
+        screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, 190)))
         if pygame.time.get_ticks() % 1000 < 500:
-            screen.blit(start_prompt, start_prompt.get_rect(center=(width // 2, height // 2 + 320)))
+            screen.blit(text_taptostart, text_taptostart.get_rect(center=(width // 2, height - 140)))
 
     elif game_state == "game_over":
         if restart_cooldown > 0:
             restart_cooldown -= dt
 
-        if new_record == True:
-            screen.blit(game_over_text, game_over_text.get_rect(center=(width // 2, height // 2 - 160)))
-            screen.blit(score_text, score_text.get_rect(center=(width // 2, height // 2 - 40)))
-            if pygame.time.get_ticks() % 1000 < 500:
-                screen.blit(restart_prompt, restart_prompt.get_rect(center=(width // 2, height // 2 + 160)))
+        screen.blit(text_game, text_game.get_rect(center=(width // 2, height // 2 - 120)))
+        screen.blit(text_over, text_over.get_rect(center=(width // 2, height // 2 + 40)))
+        screen.blit(text_hiscore, text_hiscore.get_rect(center=(width // 2, 100)))
+        screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, 190)))
+        if pygame.time.get_ticks() % 1000 < 500:
+            screen.blit(text_taptorestart, text_taptorestart.get_rect(center=(width // 2, height - 140)))
+        if new_record == True: 
+            screen.blit(text_newhiscore, text_newhiscore.get_rect(center=(width // 2, height // 2 + 200)))
         else:
-            screen.blit(game_over_text, game_over_text.get_rect(center=(width // 2, height // 2 - 220)))
-            screen.blit(score_text, score_text.get_rect(center=(width // 2, height // 2 - 100)))
-            screen.blit(high_score_text, high_score_text.get_rect(center=(width // 2, height // 2 + 20)))
-            if pygame.time.get_ticks() % 1000 < 500:
-                screen.blit(restart_prompt, restart_prompt.get_rect(center=(width // 2, height // 2 + 220)))
+            screen.blit(score_text, score_text.get_rect(center=(width // 2, height // 2 + 200)))
+
+    elif game_state == "menu":
+        menu_title = title_font.render("THEMES", True, color_score)
+        screen.blit(menu_title, menu_title.get_rect(center=(width // 2, 220)))
+        if is_muted:
+            screen.blit(mute_on_img, mute_button)
+        else:
+            screen.blit(mute_off_img, mute_button)
+
+        theme_rects = {}
+        theme_list = ["cyberpunk", "space odyssey", "soft", "pastel", "autumn", "high contrast", "mono"] 
+
+        start_y = height // 2 - 150
+        spacing = 90
+    
+        for i, t_name in enumerate(theme_list):
+            if t_name == current_theme_name:
+                text_color = color_blade
+            else:
+                text_color = (120, 120, 120)
+            theme_surf = text_font.render(t_name.upper(), True, text_color)
+            t_rect = theme_surf.get_rect(center=(width // 2, start_y + (i * spacing)))
+            screen.blit(theme_surf, t_rect)
+            theme_rects[t_name] = t_rect
+
+    elif game_state == "resuming":
+        resume_countdown -= dt
+        count_text = game_font.render(str(math.ceil(resume_countdown)), True, color_time)
+        screen.blit(count_text, count_text.get_rect(center=(width // 2, height // 2)))
+        
+        if resume_countdown <= 0:
+            game_state = "playing"
 
     elif game_state == "playing":
         time_elapsed += dt
@@ -305,7 +428,7 @@ while running:
         shake_x, shake_y = 0, 0
         if shake_duration > 0:
             shake_duration -= dt
-            intensity = 6
+            intensity = 8
             shake_x = random.randint(-intensity, intensity)
             shake_y = random.randint(-intensity, intensity)
         draw_center = (pivot_center[0] + shake_x, pivot_center[1] + shake_y)
@@ -328,7 +451,7 @@ while running:
         elif blade_velocity < -blade_max_velocity:
             blade_velocity = -blade_max_velocity
         blade_angle += blade_velocity * speed_factor
-        blade_color = (0, 255, 0) if abs(blade_velocity) == blade_max_velocity else (255, 0, 0)
+        blade_color = color_blade if abs(blade_velocity) == blade_max_velocity else color_miss
         
         rad = math.radians(blade_angle)
         tip_x = draw_center[0] + blade_length * math.cos(rad)
@@ -339,7 +462,7 @@ while running:
             screen.blit(current_score_surface, current_score_surface.get_rect(center=(width // 2, 140)))
         else:
             screen.blit(current_score_surface, current_score_surface.get_rect(center=(200, height // 2)))
-        timer_surface = game_font.render(f"{timer:.1f}", True, (255, 255, 255))
+        timer_surface = game_font.render(f"{max(0.0, timer):.1f}", True, color_time)
         if height > width:
             screen.blit(timer_surface, timer_surface.get_rect(center=(width // 2, height - 140)))
         else:
@@ -361,23 +484,18 @@ while running:
                 f_text.draw(screen, game_font)
 
         screen.blit(restart_img, restart_button)
-        if is_muted:
-            screen.blit(mute_on_img, mute_button)
-        else:
-            screen.blit(mute_off_img, mute_button)
         
         if timer <= 0:
             timer = 0
-            score_text = text_font.render(f"SCORE: {int(score)}", True, (255, 255, 255))
-            high_score_text = text_font.render(f"HIGH SCORE: {int(high_score)}", True, (255, 215, 0))
+            score_text = text_font.render(f"SCORE: {int(score)}", True, color_score)
+            high_score_text = text_font.render(f"{int(high_score)}", True, color_score)
             restart_cooldown = 0.5
             game_state = "game_over"
             if not is_muted: game_over_snd.play()
             if score > high_score:
                 high_score = score
-                save_game_data(high_score, is_muted)
+                save_game_data(high_score, is_muted, current_theme_name)
                 new_record = True
-                score_text = text_font.render(f"NEW HIGH SCORE: {int(score)}", True, (255, 215, 0))
 
 
     tapped_this_frame = False
@@ -417,20 +535,44 @@ while running:
             tap_pos = (event.x * width, event.y * height)
 
     if tapped_this_frame:
-        if game_state == "playing":
+        if tap_pos and menu_button.collidepoint(tap_pos):
+            if not is_muted: click_snd.play()
+            resume_countdown = 3
+            if game_state != "menu":
+                previous_state = game_state
+                game_state = "menu"
+            else:
+                if previous_state == "playing":
+                    game_state = "resuming"
+                else:
+                    game_state = previous_state
+
+        elif game_state == "menu":
+            if tap_pos and mute_button.collidepoint(tap_pos):
+                is_muted = not is_muted
+                if not is_muted: click_snd.play()
+                save_game_data(high_score, is_muted, current_theme_name)
+                
+            if tap_pos:
+                for t_name, t_rect in theme_rects.items():
+                    if t_rect.collidepoint(tap_pos):
+                        if not is_muted: click_snd.play()
+                        apply_theme(t_name)
+                        render_texts()
+                        save_game_data(high_score, is_muted, current_theme_name)
+                        break
+
+        elif game_state == "playing":
             if tap_pos and restart_button.collidepoint(tap_pos):
                 if not is_muted: game_over_snd.play()
                 restart_game()
-            elif tap_pos and mute_button.collidepoint(tap_pos):
-                is_muted = not is_muted
-                save_game_data(high_score, is_muted)
 
             elif abs(blade_velocity) >= blade_max_velocity:
                 hit_successful = False 
                 for zone in current_frame_zones:
                     if is_blade_hitting_zone(blade_angle, zone):
                         score += 1
-                        current_score_surface = game_font.render(f"{int(score)}", True, (255, 255, 255))
+                        current_score_surface = game_font.render(f"{int(score)}", True, color_score)
                         if zone.center_angle in angle_cd and angle_cd[zone.center_angle] > 0.3:
                             angle_cd[zone.center_angle] = 0.3
                         if zone in active_zones:
@@ -439,9 +581,9 @@ while running:
                         if zone.color == 0:
                             timer += 2
                             if height > width:
-                                floating_texts.append(FloatingText("+2", width // 2, height - 250, (0, 0, 255)))
+                                floating_texts.append(FloatingText("+2", width // 2, height - 250, color_time))
                             else:
-                                floating_texts.append(FloatingText("+2", width - 200, height // 2 - 100, (0, 0, 255)))
+                                floating_texts.append(FloatingText("+2", width - 200, height // 2 - 100, color_time))
                             if not is_muted: hit_blue_snd.play()
                         else:
                             if not is_muted: hit_yellow_snd.play()
@@ -459,9 +601,8 @@ while running:
                     shake_duration = 0.25
                     if not is_muted: miss_snd.play()
                     
-        else:
-            if game_state == "start" or (game_state == "game_over" and restart_cooldown <= 0):
-                restart_game()
+        elif game_state == "start" or (game_state == "game_over" and restart_cooldown <= 0):
+            restart_game()
 
     pygame.display.update()
 
