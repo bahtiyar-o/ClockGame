@@ -307,11 +307,11 @@ themes = {
         "bg": (0, 0, 0)
     },
         "pastel": {
-        "blade": (255, 159, 159),  # FF9F9F
-        "score": (255, 198, 168),  # FFC6A8
-        "miss": (255, 227, 163),   # FFE3A3
-        "time": (201, 242, 199),   # C9F2C7
-        "bg": (139, 211, 230)      # 8BD3E6
+        "blade": (255, 159, 159),
+        "score": (255, 198, 168),
+        "miss": (255, 227, 163),
+        "time": (201, 242, 199),
+        "bg": (139, 211, 230) 
     },
         "autumn": {
         "blade": (252, 191, 73),
@@ -321,18 +321,18 @@ themes = {
         "bg": (0, 48, 73)
     },
         "toxic": {
-        "blade": (11,97,11),    # Neon green
-        "score": 	(1,223,1),  # Pale green
-        "miss": (106,8,136),     # Bright magenta
-        "time": 	(137,4,177),     # Cyan
-        "bg": (15, 15, 20)         # Deep charcoal
+        "blade": (11, 97, 11),
+        "score": (1, 223, 1),
+        "miss": (106, 8, 136),
+        "time": (137, 4, 177),
+        "bg": (15, 15, 20)
     },
         "crimson": {
-        "blade": (119,64,57),
-        "score": (170,157,135),
-        "miss": (84,9,22),	
-        "time": (80,54,58),
-        "bg": (42,38,37)
+        "blade": (119, 64, 57),
+        "score": (170, 157, 135),
+        "miss": (84, 9, 22),	
+        "time": (80, 54, 58),
+        "bg": (42, 38, 37)
     }
 }
 
@@ -502,12 +502,12 @@ while running:
         if timer <= 0:
             timer = 0
             score_text = text_font.render(f"SCORE: {int(score)}", True, color_score)
-            high_score_text = text_font.render(f"{int(high_score)}", True, color_score)
             restart_cooldown = 0.5
             game_state = "game_over"
             if not is_muted: game_over_snd.play()
             if score > high_score:
                 high_score = score
+                high_score_text = text_font.render(f"{int(high_score)}", True, color_score)
                 save_game_data(high_score, is_muted, current_theme_name)
                 new_record = True
 
